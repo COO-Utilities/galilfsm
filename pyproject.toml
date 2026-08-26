@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "galil_driver"
+version = "0.1.0"
+description = "Python driver for the Galil controller for the FSM"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "hardware_device_base @ git+https://github.com/COO-Utilities/hardware_device_base.git",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools]
+py-modules = ["galil_driver"]
+
+[tool.pytest.ini_options]
+testpaths = ["."]

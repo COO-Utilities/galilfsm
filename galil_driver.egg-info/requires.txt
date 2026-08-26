@@ -1,0 +1,4 @@
+hardware_device_base @ git+https://github.com/COO-Utilities/hardware_device_base.git
+
+[dev]
+pytest>=7

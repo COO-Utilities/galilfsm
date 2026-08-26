@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: galil_driver
+Version: 0.1.0
+Summary: Python driver for the Galil controller for the FSM
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: hardware_device_base @ git+https://github.com/COO-Utilities/hardware_device_base.git
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+
+This is a Galil Driver for the galil that will connect to the FSM and I don't really know much about it
