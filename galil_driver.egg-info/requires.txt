@@ -1,4 +1,5 @@
 hardware_device_base @ git+https://github.com/COO-Utilities/hardware_device_base.git
+pytest>=8.4.2
 
 [dev]
 pytest>=7
