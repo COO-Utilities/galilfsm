@@ -1,4 +1,4 @@
-This is a Galil Driver for the galil that will connect to the FSM and I don't really know much about it
+This is a Galil Driver for the galil that will connect to the FSM
 
 for this to work you need to have gclib installed on your machine
 you can do this on Windows or Linux but on macos you have to do some shenanigins (rosetta 2)
