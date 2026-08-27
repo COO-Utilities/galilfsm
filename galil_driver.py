@@ -39,11 +39,10 @@ class GalilDeviceController(HardwareDeviceBase):
             )
         except gclib.Error as e:
             self.report_error(f"Could not connect to Galil at {ipaddr}: {e}")
-            raise ConnectionError(f"Could not connect to Controller at ip address: {ipaddr}") from e
 
         self.ipaddr = ipaddr
         self._set_connected(True)
-        self.report_info(f"Connected to Galil at {ipaddr}")
+        self.report_info(f"Successfully connected to Galil at {ipaddr}")
 
     @override
     def disconnect(self) -> None:
@@ -93,6 +92,7 @@ class GalilDeviceController(HardwareDeviceBase):
             self.report_info(f"Command: {command} successfully sent")
             return True
         except gclib.Error as e:
+            self._last_reply = None
             self.report_error(f"Command {command} failed: {e}")
 
         return False
@@ -102,21 +102,22 @@ class GalilDeviceController(HardwareDeviceBase):
         """Returns the last reply from the last command"""
         return self._last_reply
 
+    # def get_data_record(self, timeout: int = -1) -> gclib.DataRecord | None:
+    #     """Fetches the Data Record object from the Galil"""
+    #     if self._client == None:
+    #         return
+    #     try:
+    #         self.report_info("Fetching Data Record...")
+    #         data_record = self._client.data_record(timeout=timeout)
+    #         self.report_info("Data Record Fetched")
+    #         return data_record
+    #     except gclib.Error as e:
+    #         self.report_error(f"Failed to fetch data: {e}")
+# need to be subscribed to unsolicited data to get the data record
+
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_:object) -> None:
         # FIX: has no error handling
         self.disconnect()
-
-    def get_data_record(self, timeout: int = -1) -> gclib.DataRecord | None:
-        """Fetches the Data Record object from the Galil"""
-        if self._client == None:
-            return
-        try:
-            self.report_info("Fetching Data Record...")
-            data_record = self._client.data_record(timeout=timeout)
-            self.report_info("Data Record Fetched")
-            return data_record
-        except gclib.Error as e:
-            self.report_error(f"Failed to fetch data: {e}")
