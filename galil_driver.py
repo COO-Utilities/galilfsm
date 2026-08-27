@@ -9,6 +9,7 @@ from hardware_device_base import HardwareDeviceBase
 
 # NOTE: should have a dataclass or something of all the different commands that can be issued
 
+# IA is the command to get ip address
 
 class GalilMotionController(HardwareDeviceBase):
     """Facilitates Communication between Galil (DMC-30014) and Fast Steering Mirror (FSM)"""
@@ -83,12 +84,7 @@ class GalilMotionController(HardwareDeviceBase):
         """Returns the last reply from the last command"""
         return self._last_reply
 
-    def get_commands(self) -> dict[str, str]:
-        """
-        Returns a map of all commands to their descriptions for the DMC-30014 Galil
-
-        :return: Dictionary of mapping commands and their descriptions
-        """
-
-        # WIP: need to find list of galil commands
-        return {}
+    # def get_data_record(self, timeout: int = -1) -> gclib.DataRecord | None:
+    #     if self._client == None:
+    #         return
+    #     self._client.data_record(timeout=timeout)
