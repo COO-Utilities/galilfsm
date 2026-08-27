@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from typing import override
+from typing import Self, override
 
 import gclib  # pyright: ignore[reportMissingImports]  # Linux and Windows only, requires Galil software
 from hardware_device_base import HardwareDeviceBase
 
-# NOTE: should have a dataclass or something of all the different commands that can be issued
 
-# IA is the command to get ip address
-
-class GalilMotionController(HardwareDeviceBase):
+class GalilDeviceController(HardwareDeviceBase):
     """Facilitates Communication between Galil (DMC-30014) and Fast Steering Mirror (FSM)"""
 
     def __init__(
@@ -40,9 +37,13 @@ class GalilMotionController(HardwareDeviceBase):
                 if baud_rate
                 else gclib.Controller(ipaddr)
             )
-            self._set_connected(True)
         except gclib.Error as e:
-            self.report_error(f"{e}")
+            self.report_error(f"Could not connect to Galil at {ipaddr}: {e}")
+            raise ConnectionError(f"Could not connect to Controller at ip address: {ipaddr}") from e
+
+        self.ipaddr = ipaddr
+        self._set_connected(True)
+        self.report_info(f"Connected to Galil at {ipaddr}")
 
     @override
     def disconnect(self) -> None:
@@ -52,12 +53,29 @@ class GalilMotionController(HardwareDeviceBase):
             return
 
         try:
-            # FIX: say disconnecting from serial port or not
-            self.report_info("Disconnecting Galil")
+            self.report_info(f"Disconnecting Galil at {self.ipaddr}")
             self._client.close()
             self._set_connected(False)
+            self.report_info("Closed connection")
         except gclib.Error as e:
-            self.report_error(f"{e}")
+            self.report_error(f"Failed to disconnect: {e}")
+
+    def reconnect(self) -> bool:
+        """Reconnects controller. Only works if used disconnect in the past"""
+        if self._client == None:
+            self.report_error("Controller not defined. Try to connect to a galil first")
+            return False
+
+        try:
+            self.report_info(f"Connecting to galil at {self.ipaddr}...")
+            self._client.open()
+            self._set_connected(True)
+            self.report_info(f"Connected Controller at {self.ipaddr}")
+            return True
+        except gclib.Error as e:
+            self.report_error(f"Failed to reconnect: {e}")
+
+        return False
 
     @override
     def _send_command(self, command: str) -> bool:
@@ -75,7 +93,7 @@ class GalilMotionController(HardwareDeviceBase):
             self.report_info(f"Command: {command} successfully sent")
             return True
         except gclib.Error as e:
-            self.report_error(f"{e}")
+            self.report_error(f"Command {command} failed: {e}")
 
         return False
 
@@ -84,7 +102,21 @@ class GalilMotionController(HardwareDeviceBase):
         """Returns the last reply from the last command"""
         return self._last_reply
 
-    # def get_data_record(self, timeout: int = -1) -> gclib.DataRecord | None:
-    #     if self._client == None:
-    #         return
-    #     self._client.data_record(timeout=timeout)
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_:object) -> None:
+        # FIX: has no error handling
+        self.disconnect()
+
+    def get_data_record(self, timeout: int = -1) -> gclib.DataRecord | None:
+        """Fetches the Data Record object from the Galil"""
+        if self._client == None:
+            return
+        try:
+            self.report_info("Fetching Data Record...")
+            data_record = self._client.data_record(timeout=timeout)
+            self.report_info("Data Record Fetched")
+            return data_record
+        except gclib.Error as e:
+            self.report_error(f"Failed to fetch data: {e}")
