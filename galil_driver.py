@@ -1,11 +1,16 @@
 # pyright: reportImplicitOverride=false
-
 from __future__ import annotations
 
 from typing import Self, override
 
 import gclib  # pyright: ignore[reportMissingImports]  # Linux and Windows only, requires Galil software
 from hardware_device_base import HardwareDeviceBase
+
+VOLTAGE_MAX = 10 # I think it is actually 9.9998
+VOLTAGE_MIN = -10 # I think it is actually -9.9998
+
+X_COMMAND = "AO 1"
+Y_COMMAND = "AO 2"
 
 
 class GalilDeviceController(HardwareDeviceBase):
@@ -102,22 +107,49 @@ class GalilDeviceController(HardwareDeviceBase):
         """Returns the last reply from the last command"""
         return self._last_reply
 
-    # def get_data_record(self, timeout: int = -1) -> gclib.DataRecord | None:
-    #     """Fetches the Data Record object from the Galil"""
-    #     if self._client == None:
-    #         return
-    #     try:
-    #         self.report_info("Fetching Data Record...")
-    #         data_record = self._client.data_record(timeout=timeout)
-    #         self.report_info("Data Record Fetched")
-    #         return data_record
-    #     except gclib.Error as e:
-    #         self.report_error(f"Failed to fetch data: {e}")
-# need to be subscribed to unsolicited data to get the data record
+    def _send_output_voltage(self, command: str, voltage: float = 0) -> None:
+        """
+        Sends a analog voltage to the FSM (either to X or Y)
+        Voltage needs to be between -9.9998 and 9.9998
+        """
+        axis = "X+" if command == X_COMMAND else "Y+"
+        self.report_info(f"Sending {voltage} volts to {axis} command on FSM Controller...")
+
+        if voltage > VOLTAGE_MAX and voltage < VOLTAGE_MIN:
+            self.report_error(f"Voltage needs to be between {VOLTAGE_MIN} and {VOLTAGE_MAX}.")
+            return
+        # send Analog Output command and capture success
+        success = self._send_command(f"{command},{voltage}")
+        if success:
+            self.report_info(f"Successfully sent {voltage} volts to {axis} command on FSM Controller")
+        else:
+            self.report_info("Failed to send voltage to FSM Controller")
+
+    def set_x_voltage(self, voltage: float = 0) -> None:
+        """
+        Sends an analog voltage to FSM to set X position
+        Voltage needs to be between -9.9998 and 9.9998
+        """
+        self._send_output_voltage(X_COMMAND, voltage)
+
+    def set_y_voltage(self, voltage: float = 0) -> None:
+        """
+        Sends an analog voltage to FSM to set Y position
+        Voltage needs to be between -9.9998 and 9.9998
+        """
+        self._send_output_voltage(Y_COMMAND, voltage)
+
+    def set_position_voltage(self, x_volt: float = 0, y_volt: float = 0) -> None:
+        """
+        Sends an analog voltage to FSM to set position
+        starts with X then does Y
+        """
+        # FIX: should do these concurrently
+        self._send_output_voltage(X_COMMAND, x_volt)
+        self._send_output_voltage(Y_COMMAND, y_volt)
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_:object) -> None:
-        # FIX: has no error handling
         self.disconnect()
