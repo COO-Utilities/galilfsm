@@ -20,9 +20,11 @@ class GalilDeviceController(HardwareDeviceBase):
         self, log: bool = True, logfile: str = __name__.rsplit(".", 1)[-1]
     ) -> None:
         super().__init__(log, logfile)
-        self.ipaddr: str | None = None
+        self._ipaddr: str | None = None
         self._client: gclib.Controller | None = None
         self._last_reply: str | None = None
+        self._x_voltage: float = 0.0
+        self._y_voltage: float = 0.0
 
     @override
     def connect(self, ipaddr: str, baud_rate: int | None = None) -> None:
@@ -44,8 +46,9 @@ class GalilDeviceController(HardwareDeviceBase):
             )
         except gclib.Error as e:
             self.report_error(f"Could not connect to Galil at {ipaddr}: {e}")
+            return
 
-        self.ipaddr = ipaddr
+        self._ipaddr = ipaddr
         self._set_connected(True)
         self.report_info(f"Successfully connected to Galil at {ipaddr}")
 
@@ -57,7 +60,7 @@ class GalilDeviceController(HardwareDeviceBase):
             return
 
         try:
-            self.report_info(f"Disconnecting Galil at {self.ipaddr}")
+            self.report_info(f"Disconnecting Galil at {self._ipaddr}")
             self._client.close()
             self._set_connected(False)
             self.report_info("Closed connection")
@@ -71,10 +74,10 @@ class GalilDeviceController(HardwareDeviceBase):
             return False
 
         try:
-            self.report_info(f"Connecting to galil at {self.ipaddr}...")
+            self.report_info(f"Connecting to galil at {self._ipaddr}...")
             self._client.open()
             self._set_connected(True)
-            self.report_info(f"Connected Controller at {self.ipaddr}")
+            self.report_info(f"Connected Controller at {self._ipaddr}")
             return True
         except gclib.Error as e:
             self.report_error(f"Failed to reconnect: {e}")
@@ -107,49 +110,79 @@ class GalilDeviceController(HardwareDeviceBase):
         """Returns the last reply from the last command"""
         return self._last_reply
 
-    def _send_output_voltage(self, command: str, voltage: float = 0) -> None:
-        """
-        Sends a analog voltage to the FSM (either to X or Y)
-        Voltage needs to be between -9.9998 and 9.9998
-        """
-        axis = "X+" if command == X_COMMAND else "Y+"
-        self.report_info(f"Sending {voltage} volts to {axis} command on FSM Controller...")
+    @staticmethod
+    def _validate_voltage(voltage: float) -> None:
+        if not (VOLTAGE_MIN <= voltage <= VOLTAGE_MAX):
+            raise ValueError(
+                f"Voltage {voltage} out of range [{VOLTAGE_MIN}, {VOLTAGE_MAX}]"
+            )
 
-        if voltage > VOLTAGE_MAX and voltage < VOLTAGE_MIN:
-            self.report_error(f"Voltage needs to be between {VOLTAGE_MIN} and {VOLTAGE_MAX}.")
-            return
-        # send Analog Output command and capture success
+    def _send_voltage(self, command: str, axis_label: str, voltage: float) -> bool:
+        """Sends Voltage to FSM controller and reports success in logs"""
         success = self._send_command(f"{command},{voltage}")
         if success:
-            self.report_info(f"Successfully sent {voltage} volts to {axis} command on FSM Controller")
+            self.report_info(f"Successfully sent {voltage} volts to {axis_label} command on FSM Controller")
         else:
             self.report_info("Failed to send voltage to FSM Controller")
+        return success
 
-    def set_x_voltage(self, voltage: float = 0) -> None:
-        """
-        Sends an analog voltage to FSM to set X position
-        Voltage needs to be between -9.9998 and 9.9998
-        """
-        self._send_output_voltage(X_COMMAND, voltage)
+    @property
+    def x_voltage(self) -> float:
+        """Last commanded X-axis voltage. This is not necessarily the X-axis Voltage of the FMS"""
+        return self._x_voltage
 
-    def set_y_voltage(self, voltage: float = 0) -> None:
-        """
-        Sends an analog voltage to FSM to set Y position
-        Voltage needs to be between -9.9998 and 9.9998
-        """
-        self._send_output_voltage(Y_COMMAND, voltage)
+    @x_voltage.setter
+    def x_voltage(self, voltage: float) -> None:
+        """Sets x voltage and sends it to FSM Controller"""
+        self._validate_voltage(voltage)
+        if self._send_voltage(X_COMMAND, "X+", voltage):
+            self._x_voltage = voltage
 
-    def set_position_voltage(self, x_volt: float = 0, y_volt: float = 0) -> None:
-        """
-        Sends an analog voltage to FSM to set position
-        starts with X then does Y
-        """
+    @property
+    def y_voltage(self) -> float:
+        """Last commanded Y-axis voltage. This is not necessarily the Y-axis Voltage of the FMS"""
+        return self._y_voltage
+
+    @y_voltage.setter
+    def y_voltage(self, voltage: float) -> None:
+        """Sets y voltage and sends it to FSM Controller"""
+        self._validate_voltage(voltage)
+        if self._send_voltage(Y_COMMAND, "Y+", voltage):
+            self._y_voltage = voltage
+
+    def send_position_voltage(self, x_volt: float = 0, y_volt: float = 0) -> None:
+        """Sends analog voltages to set FSM position. X then Y."""
         # FIX: should do these concurrently
-        self._send_output_voltage(X_COMMAND, x_volt)
-        self._send_output_voltage(Y_COMMAND, y_volt)
+        self.x_voltage = x_volt
+        self.y_voltage = y_volt
+
+    @override
+    def initialize(self) -> bool:
+        """initialize motor and Axis so Analog can be sent for both directions"""
+        if self._client is None:
+            self.report_error("Client controller has not been defined")
+            return False
+        self._send_command("MO")
+        self._send_command("MT 1")
+        self._send_command("BA A")
+        self.report_info("Controller ready to operate")
+
+        return True
+
+    @property
+    def ipaddr(self) -> str | None:
+        """IP address of the currently connected Galil, if any."""
+        return self._ipaddr
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_:object) -> None:
         self.disconnect()
+
+
+# MT must be set for servo or 2PB motor and BA is set for A access, MT can't be changed when sending analog output
+# to set MT, the motor must be off MO
+# for DMC-30014 the amplifier is a linear sine drive
+# must set MT 1 or -1
+# then BA A
