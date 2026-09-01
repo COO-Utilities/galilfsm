@@ -162,9 +162,11 @@ class GalilDeviceController(HardwareDeviceBase):
         if self._client is None:
             self.report_error("Client controller has not been defined")
             return False
-        self._send_command("MO")
+        self._send_command("MO A")
         self._send_command("MT 1")
+        self._send_command("BR 0")
         self._send_command("BA A")
+        self._send_command("SH A")
         self.report_info("Controller ready to operate")
 
         return True
@@ -186,3 +188,6 @@ class GalilDeviceController(HardwareDeviceBase):
 # for DMC-30014 the amplifier is a linear sine drive
 # must set MT 1 or -1
 # then BA A
+
+
+# for general purpose analog output MT 1 or -1, BR 0
