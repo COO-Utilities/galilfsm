@@ -156,19 +156,30 @@ class GalilDeviceController(HardwareDeviceBase):
         self.x_voltage = x_volt
         self.y_voltage = y_volt
 
+    def _get_galil_measured_analog_output(self, axis: int) -> str | None:
+        """Axis should either be 1 or 2, 1 is x axis and 2 is y axis, temporary function"""
+        if self._send_command(f"MG@AO[{axis}]"):
+            return self._read_reply()
+        self.report_error("Command failed")
+        return None
+
     @override
     def initialize(self) -> bool:
         """initialize motor and Axis so Analog can be sent for both directions"""
         if self._client is None:
             self.report_error("Client controller has not been defined")
             return False
-        self._send_command("MO A")
-        self._send_command("MT 1")
-        self._send_command("BR 0")
-        self._send_command("BA A")
-        self._send_command("SH A")
-        self.report_info("Controller ready to operate")
 
+        init_commands = ("MO A", "MT 1", "BR 0", "BA A")
+
+        for command in init_commands:
+            success = self._send_command(command)
+            if not success:
+                self.report_error(f"Initialization failed at command: {command}")
+                return False
+
+        # self._send_command("SH") # Don't turn on the motor
+        self.report_info("Controller ready to operate")
         return True
 
     @property
