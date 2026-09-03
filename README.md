@@ -30,6 +30,7 @@ gclib.ip_requests()
 gclib.addresses()
 # find address you want
 # define variables mac_address and ip_addr or just input directly
+# ip address should be same subnet as host computer
 gclib.assign_ip(f'{mac_address}', f'{ip_addr}')
 ```
 #### Connect Controller
@@ -61,3 +62,4 @@ driver._read_reply()
 `.\.venv\Scripts\activate.ps1` to activate venv
 `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` to temporarily allow scripts to run
 `Set-ExecutionPolicy RemoteSigned` to perminantly allow scripts to run (requires administrative privileges)
+`ipconfig` to find current ip and subnet

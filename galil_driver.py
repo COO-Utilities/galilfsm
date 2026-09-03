@@ -6,8 +6,8 @@ from typing import Self, override
 import gclib  # pyright: ignore[reportMissingImports]  # Linux and Windows only, requires Galil software
 from hardware_device_base import HardwareDeviceBase
 
-VOLTAGE_MAX = 10 # I think it is actually 9.9998
-VOLTAGE_MIN = -10 # I think it is actually -9.9998
+VOLTAGE_MAX = 9.9998
+VOLTAGE_MIN = -9.9998
 
 X_COMMAND = "AO 1"
 Y_COMMAND = "AO 2"
@@ -158,6 +158,7 @@ class GalilDeviceController(HardwareDeviceBase):
 
     def _get_galil_measured_analog_output(self, axis: int) -> str | None:
         """Axis should either be 1 or 2, 1 is x axis and 2 is y axis, temporary function"""
+        # NOTE: This should potentially be fazed out once offset problem is fixed
         if self._send_command(f"MG@AO[{axis}]"):
             return self._read_reply()
         self.report_error("Command failed")
@@ -166,6 +167,7 @@ class GalilDeviceController(HardwareDeviceBase):
     @override
     def initialize(self) -> bool:
         """initialize motor and Axis so Analog can be sent for both directions"""
+        # NOTE: This should eventually be fazed out and coded into the galil using #AUTO so it does this on startup
         if self._client is None:
             self.report_error("Client controller has not been defined")
             return False
@@ -178,7 +180,6 @@ class GalilDeviceController(HardwareDeviceBase):
                 self.report_error(f"Initialization failed at command: {command}")
                 return False
 
-        # self._send_command("SH") # Don't turn on the motor
         self.report_info("Controller ready to operate")
         return True
 
@@ -199,6 +200,4 @@ class GalilDeviceController(HardwareDeviceBase):
 # for DMC-30014 the amplifier is a linear sine drive
 # must set MT 1 or -1
 # then BA A
-
-
 # for general purpose analog output MT 1 or -1, BR 0
