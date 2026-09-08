@@ -1,7 +1,11 @@
-
+!.gitignore
 # egg info
 *.egg-info/
 
-
 # venv
 .venv
+
+.*
+
+# cache
+__pycache__/

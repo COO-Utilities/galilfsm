@@ -1,7 +1,7 @@
 # pyright: reportImplicitOverride=false
 from __future__ import annotations
 
-from typing import Self, override
+from typing import NamedTuple, Self, override
 
 import gclib  # pyright: ignore[reportMissingImports]  # Linux and Windows only, requires Galil software
 from hardware_device_base import HardwareDeviceBase
@@ -9,8 +9,14 @@ from hardware_device_base import HardwareDeviceBase
 VOLTAGE_MAX = 9.9998
 VOLTAGE_MIN = -9.9998
 
-X_COMMAND = "AO 1"
-Y_COMMAND = "AO 2"
+class _Axis(NamedTuple):
+    label: str
+    get_command: str
+    set_command: str  # add voltage to end of string when using
+
+
+X_AXIS = _Axis(label="X+", get_command="MG@AO[1]", set_command="AO 1,")
+Y_AXIS = _Axis(label="Y+", get_command="MG@AO[2]", set_command="AO 2,")
 
 
 class GalilDeviceController(HardwareDeviceBase):
@@ -23,8 +29,6 @@ class GalilDeviceController(HardwareDeviceBase):
         self._ipaddr: str | None = None
         self._client: gclib.Controller | None = None
         self._last_reply: str | None = None
-        self._x_voltage: float = 0.0
-        self._y_voltage: float = 0.0
 
     @override
     def connect(self, ipaddr: str, baud_rate: int | None = None) -> None:
@@ -72,6 +76,9 @@ class GalilDeviceController(HardwareDeviceBase):
         if self._client == None:
             self.report_error("Controller not defined. Try to connect to a galil first")
             return False
+        if self.is_connected() == True:
+            self.report_error("Controller is connected. Disconnect before trying to reconnnect")
+            return False
 
         try:
             self.report_info(f"Connecting to galil at {self._ipaddr}...")
@@ -117,52 +124,56 @@ class GalilDeviceController(HardwareDeviceBase):
                 f"Voltage {voltage} out of range [{VOLTAGE_MIN}, {VOLTAGE_MAX}]"
             )
 
-    def _send_voltage(self, command: str, axis_label: str, voltage: float) -> bool:
-        """Sends Voltage to FSM controller and reports success in logs"""
-        success = self._send_command(f"{command},{voltage}")
+    def _send_voltage(self, axis: _Axis, voltage: float) -> bool:
+        """Sends Voltage to FSM controller for given axis and reports success in logs"""
+        success = self._send_command(f"{axis.set_command}{voltage}")
         if success:
-            self.report_info(f"Successfully sent {voltage} volts to {axis_label} command on FSM Controller")
+            self.report_info(
+                f"Successfully sent {voltage} volts to {axis.label} command on FSM Controller"
+            )
         else:
             self.report_info("Failed to send voltage to FSM Controller")
         return success
 
+    def _get_voltage(self, axis: _Axis) -> float | None:
+        """Gets voltage from FSM controller for the specified axis"""
+        if self._send_command(axis.get_command):
+            reply = self._read_reply()
+            try:
+                return float(reply) if reply is not None else None
+            except ValueError:
+                self.report_error(f"Unexpected reply for {axis.label} axis: {reply!r}")
+                return None
+        self.report_error("Command failed")
+        return None
+
     @property
-    def x_voltage(self) -> float:
-        """Last commanded X-axis voltage. This is not necessarily the X-axis Voltage of the FMS"""
-        return self._x_voltage
+    def x_voltage(self) -> float | None:
+        """Sends command to galil to get x_voltage"""
+        return self._get_voltage(X_AXIS)
 
     @x_voltage.setter
     def x_voltage(self, voltage: float) -> None:
         """Sets x voltage and sends it to FSM Controller"""
         self._validate_voltage(voltage)
-        if self._send_voltage(X_COMMAND, "X+", voltage):
-            self._x_voltage = voltage
+        self._send_voltage(X_AXIS, voltage)
 
     @property
-    def y_voltage(self) -> float:
-        """Last commanded Y-axis voltage. This is not necessarily the Y-axis Voltage of the FMS"""
-        return self._y_voltage
+    def y_voltage(self) -> float | None:
+        """Sends command to galil to get y_voltage"""
+        return self._get_voltage(Y_AXIS)
 
     @y_voltage.setter
     def y_voltage(self, voltage: float) -> None:
         """Sets y voltage and sends it to FSM Controller"""
         self._validate_voltage(voltage)
-        if self._send_voltage(Y_COMMAND, "Y+", voltage):
-            self._y_voltage = voltage
+        self._send_voltage(Y_AXIS, voltage)
 
     def send_position_voltage(self, x_volt: float = 0, y_volt: float = 0) -> None:
-        """Sends analog voltages to set FSM position. X then Y."""
+        """Sends analog voltages to set FSM position sequencially. X then Y."""
         # FIX: should do these concurrently
         self.x_voltage = x_volt
         self.y_voltage = y_volt
-
-    def _get_galil_measured_analog_output(self, axis: int) -> str | None:
-        """Axis should either be 1 or 2, 1 is x axis and 2 is y axis, temporary function"""
-        # NOTE: This should potentially be fazed out once offset problem is fixed
-        if self._send_command(f"MG@AO[{axis}]"):
-            return self._read_reply()
-        self.report_error("Command failed")
-        return None
 
     @override
     def initialize(self) -> bool:
@@ -191,7 +202,7 @@ class GalilDeviceController(HardwareDeviceBase):
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *_:object) -> None:
+    def __exit__(self, *_: object) -> None:
         self.disconnect()
 
 
